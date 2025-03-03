@@ -1,0 +1,5 @@
+casename,b_area,basedep,f,iceflag,default_dict_path,dict_name,datafile,outdir,xlat,xlon,casename
+LHS_run_v0_1,21000,100.0,0.01,.false.,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_main,CP_SLIM_lowTopo_500ppm_test_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2,34,-101,LHS_run_v0_1
+LHS_run_v0_2,210000,500.0,0.25,.true.,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_main,CP_SLIM_lowTopo_500ppm_test_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2,34,-101,LHS_run_v0_2
+LHS_run_v0_3,2100000,1500.0,0.75,.false.,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_main,CP_SLIM_lowTopo_500ppm_test_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2,34,-101,LHS_run_v0_3
+LHS_run_v0_4,21000000,3000.0,0.99,.true.,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_main,CP_SLIM_lowTopo_500ppm_test_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2,34,-101,LHS_run_v0_4
