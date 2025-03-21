@@ -629,3 +629,226 @@ def process_ebm_results(
     # process the surface data
     # TODO ....
     # ---
+
+
+# --- [hailey carbonate sensor functions]    
+# --- function to calculate cap47 from temperature
+def clumped_sensor(
+        temp_c: pd.DataFrame,
+        model: str,
+) -> np.array:
+    
+    if model == 'I-CDES90':
+        cap47 = 0.0004 * 10**6 / (temp_c + 273.15)**2 + 0.154 # Anderson et al 2021 I-CDES90 ref frame (w/ conversion from Celcius to Kelvin) # not including +/- uncertainties, can add later
+    elif model == 'CDES90': 
+        cap47 = 1  # will add other functions
+    else:
+        raise ValueError('Model not recognized')
+        
+    return cap47.to_numpy()  
+ 
+    # TODO add more models
+    
+# --- function to calculate temperature from cap47
+def clumped_temperature(
+     cap47: pd.DataFrame,
+     model: str,
+) -> np.array:
+    
+    if model == 'I-CDES90':
+        temp_c = ((0.0004 * (10**6) / (cap47 - 0.154))**0.5) - 273.15
+    elif model == 'CDES90': 
+        temp_c = 1  # will add other functions
+    else:
+        raise ValueError('Model not recognized')
+        
+    return temp_c.to_numpy()
+ 
+    # TODO add more models
+    
+# --- function to generate depth weights  
+def generate_depth_weights(
+    depth: pd.DataFrame, 
+    weight_type: str,
+) -> np.ndarray:
+    """
+    Generate a depth-weighting function.
+
+    Parameters
+    ----------
+    depth: pd.DataFrame
+        DataFrame column of depth values.
+    weight_type: str
+        Equation type for computing the weighting with depth.
+
+    Returns:
+        np.ndarray: Array of weights aligned with the depth values.
+    """
+    if weight_type == 'uniform':
+            weights = [1 if not pd.isna(val) else np.nan for val in depth] # Initialize all weights to 1
+            weights = pd.DataFrame(weights, columns=['Weight'])
+        
+    elif weight_type == 'surface':
+        weights = [0 if not pd.isna(val) else np.nan for val in depth] # Initialize all weights to 0
+        weights[0] = 1  # Assign weight of 1 to the first element
+        weights = pd.DataFrame(weights)
+
+    elif weight_type == 'step':
+        depth_min = X  # Set your desired minimum depth
+        depth_max = X  # Set your desired maximum depth
+
+        conditions = [
+            depth.isna(),
+            (depth >= depth_min) & (depth <= depth_max)
+        ]
+        choices = [np.nan, 1]
+        weights = np.select(conditions, choices, default=0)
+        weights = pd.DataFrame(weights, index=depth.index)
+        
+    elif weight_type == 'normal_dist':
+        depth_index_mean = round(depth.values.mean(), 2)
+        depth_index_std = round(depth.values.std(), 2)
+        weights = (1 / (depth_index_std * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((depth - depth_index_mean) / depth_index_std) ** 2)
+        # Normalize the weights so they sum to 1
+        weights /= weights.sum()
+    else:
+        raise ValueError('Weight type not recognized')
+    
+    return weights
+
+# --- function to generate time weights
+def generate_time_weights(
+    timesteps:np.ndarray, 
+    weight_type: str, 
+    selected_months= list,
+) -> np.ndarray: 
+    """
+    Generate a time-weighting function.
+    
+    Parameters
+    ----------
+    depth: pd.DataFrame
+        DataFrame column of depth values.
+    weight_type: str
+        Equation type for computing the weighting with doy.
+    selected_months: list 
+        List of months from dict to apply the 'range' time weighting function to (e.g. selected_months=['January', 'February']), otherwise 'None'.
+
+    Returns:
+       np.ndarray: Array of weights aligned with doy values.
+    """
+    months = {
+        'MAMJ': range(60, 182),  # March to June
+        'AMJ': range(91, 182),  # April to June  
+        'AMJJ': range(91, 213),  # April to July
+        'AMJJASO': range(91, 305),  # April to October
+        'JJA': range(152, 244),  # July to August 
+        'ASO': range(213, 305),  # August to October
+        'January': range(0, 32),
+        'February': range(32, 60),
+        'March': range(60, 91),
+        'April': range(91, 121),
+        'May': range(121, 152),
+        'June': range(152, 182),
+        'July': range(182, 213),
+        'August': range(213, 244),
+        'September': range(244, 274),
+        'October': range(274, 305),
+        'November': range(305, 335),
+        'December': range(335, 366)
+        }
+    
+    if weight_type == 'uniform':
+        weights = [1] * len(timesteps)  # Initialize all weights to 1
+    
+    elif weight_type == 'range':
+        # ... check to see if any selected months don't occur in the months dict
+        #     return a message to let the user know (maybe they mis-spelled something)
+        missing_keys = [key for key in selected_months if key not in months]
+        if missing_keys:
+            print(f"Warning: selected month option(s) {missing_keys} is not valid. Please select from {list(months.keys())}")
+
+        # ... filter the months dict for just the selected months
+        selected_months_dict = {key: months[key] for key in selected_months if key in months}
+
+        # ... return 1 if the timestep is within one of the ranges, return 0 otherwise
+        weights = [1 if any(start <= num <= end for start, end in selected_months_dict.values()) else 0 for num in timesteps]
+        
+    elif weight_type == 'normal_dist':
+        time_index_mean = round(timesteps.values.mean(), 2)
+        time_index_std = round(timesteps.values.std(), 2)
+        weights = (1 / (time_index_std * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((timesteps - time_index_mean) / time_index_std) ** 2)
+        # Normalize the weights so they sum to 1
+        weights /= weights.sum()
+    else:
+        raise ValueError('Weight type not recognized')
+    
+    return weights
+
+# --- function to process lake profile data for clumped carbonate sensor
+def process_lake_data(
+    lakedata: xr.Dataset,
+    ) -> xr.Dataset:
+
+    timesteps = lakedata['doy'].values.tolist()
+    cap47 = []
+
+    for ts in (timesteps) :
+        tmpds = lakedata.sel(doy = ts) # pull out this timestep
+        tmpdf = tmpds.to_dataframe().reset_index()  # convert it to pandas df
+
+        temp_c = pd.DataFrame(tmpdf['temp_c'])['temp_c']
+        depth = pd.DataFrame(tmpdf['depth_index'])['depth_index']
+        
+        ts_cap47 = clumped_sensor(temp_c, 'I-CDES90')
+        ts_cap47 = pd.DataFrame(ts_cap47).copy()
+        ts_cap47 = ts_cap47.rename(columns={'temp_c': 'cap47'})
+        cap47.append(ts_cap47)
+        nan_count = temp_c[::-1].isna().cumprod().sum()
+        depth.iloc[-nan_count:] = np.nan 
+
+        depth_weights = generate_depth_weights(depth, 'uniform')  
+        depth_weights = pd.DataFrame(depth_weights.values.flatten())
+       
+        if ts == timesteps[0]:
+            df = pd.DataFrame(tmpdf['doy'].values, columns=['doy'])
+            cap47_depth_wtd_mean = (ts_cap47.values * depth_weights).sum() / depth_weights.sum()
+            temp_c_depth_wtd_mean = (temp_c * depth_weights).sum() / depth_weights.sum()
+            df = df.assign(temp_c_depth_wtd_mean = temp_c_depth_wtd_mean).dropna()
+            df = df.assign(cap47_depth_wtd_mean = cap47_depth_wtd_mean).dropna()
+        else:
+            tdf = pd.DataFrame(tmpdf['doy'].values, columns=['doy'])
+            cap47_depth_wtd_mean = (ts_cap47.values * depth_weights).sum() / depth_weights.sum()
+            temp_c_depth_wtd_mean = (temp_c * depth_weights).sum() / depth_weights.sum()
+            tdf = tdf.assign(temp_c_depth_wtd_mean = temp_c_depth_wtd_mean).dropna()
+            tdf = tdf.assign(cap47_depth_wtd_mean = cap47_depth_wtd_mean).dropna()
+            df = pd.concat([tdf, df], ignore_index=True)
+            df = df.dropna()      
+
+    T47_c_depth_wtd_mean = clumped_temperature(df['cap47_depth_wtd_mean'], 'I-CDES90')
+
+    df = df.set_index('doy', drop=True)
+    df = df.assign(T47_c_depth_wtd_mean = T47_c_depth_wtd_mean)
+    df = xr.Dataset.from_dataframe(df)
+    time_weights = generate_time_weights(timesteps, 'uniform') 
+    time_weights = time_weights[::-1]
+    df = df.assign(time_weights=(['doy'], time_weights))
+    df['cap47_time_wtd_mean'] = (df['cap47_depth_wtd_mean']* df['time_weights']).sum() / df['time_weights'].sum()
+    df['T47_c_MAT'] = (df['T47_c_depth_wtd_mean'] * df['time_weights']).sum() / df['time_weights'].sum()    
+
+    final_output_init = xr.combine_by_coords([df, lakedata])
+
+    final_output_init = final_output_init.assign(depth_weights=(['depth_index'], depth_weights.to_numpy().flatten()))
+    
+    ds_cap47 = xr.Dataset(
+    {
+        "cap47": (["doy", "depth_index"], np.stack([df[0].values for df in cap47]))
+    },
+    coords={"doy": final_output_init['doy'].values, "depth_index": final_output_init['depth_index'].values}
+    )
+
+    final_output = xr.merge([ds_cap47, final_output_init])
+    depth_weights_expanded = np.tile(final_output['depth_weights'], (len(final_output['doy']), 1))
+    final_output["depth_weights"] = (['doy', 'depth_index'], depth_weights_expanded)
+    final_output = final_output.dropna(dim='depth_index', how='all')
+    return final_output
