@@ -574,7 +574,7 @@ def profile_df_to_ds(
 def process_ebm_results(
         rundict: dict,
         casetype: str="batch",
-):
+) -> str:
     '''
     Process the raw lake ebm output files (*prof.dat and *surf.dat)
     and save the results.
@@ -589,6 +589,8 @@ def process_ebm_results(
 
     Returns
     -------
+    str
+        case directory (to pass on to later processing functions)
     '''
     # --- assign vars
     outdir = rundict['outdir']
@@ -630,6 +632,8 @@ def process_ebm_results(
     # TODO ....
     # ---
 
+    return casedir
+
 
 # --- [hailey carbonate sensor functions]    
 # --- function to calculate cap47 from temperature
@@ -670,6 +674,7 @@ def clumped_temperature(
 def generate_depth_weights(
     depth: pd.DataFrame, 
     weight_type: str,
+    **kwargs: dict,
 ) -> np.ndarray:
     """
     Generate a depth-weighting function.
@@ -680,8 +685,11 @@ def generate_depth_weights(
         DataFrame column of depth values.
     weight_type: str
         Equation type for computing the weighting with depth.
+    kwargs : dict
+        additional arguments needed for certain weight_types
 
-    Returns:
+    Returns
+    -------
         np.ndarray: Array of weights aligned with the depth values.
     """
     if weight_type == 'uniform':
@@ -694,8 +702,17 @@ def generate_depth_weights(
         weights = pd.DataFrame(weights)
 
     elif weight_type == 'step':
-        depth_min = X  # Set your desired minimum depth
-        depth_max = X  # Set your desired maximum depth
+        # --- (check if min and max depths are defined)
+        if kwargs.get('depth_min'):
+            depth_min = kwargs['depth_min']
+        else:
+            raise ValueError("depth_min required if weight_type=='step', but not found in kwarg dict")
+        if kwargs.get('depth_max'):
+            depth_max = kwargs['depth_max']
+        else:
+            raise ValueError("depth_max required if weight_type=='step', but not found in kwarg dict")
+        # ---
+
 
         conditions = [
             depth.isna(),
@@ -720,7 +737,7 @@ def generate_depth_weights(
 def generate_time_weights(
     timesteps:np.ndarray, 
     weight_type: str, 
-    selected_months= list,
+    **kwargs: dict,
 ) -> np.ndarray: 
     """
     Generate a time-weighting function.
@@ -734,7 +751,8 @@ def generate_time_weights(
     selected_months: list 
         List of months from dict to apply the 'range' time weighting function to (e.g. selected_months=['January', 'February']), otherwise 'None'.
 
-    Returns:
+    Returns
+    -------
        np.ndarray: Array of weights aligned with doy values.
     """
     months = {
@@ -762,6 +780,11 @@ def generate_time_weights(
         weights = [1] * len(timesteps)  # Initialize all weights to 1
     
     elif weight_type == 'range':
+        # make sure we have the selected_months var 
+        if kwargs.get('selected_months'):
+            selected_months = selected_months
+        else:
+            raise ValueError("weight_type == 'range' requires selected_months key in kwargs, but it wasn't found")
         # ... check to see if any selected months don't occur in the months dict
         #     return a message to let the user know (maybe they mis-spelled something)
         missing_keys = [key for key in selected_months if key not in months]
@@ -786,10 +809,31 @@ def generate_time_weights(
     return weights
 
 # --- function to process lake profile data for clumped carbonate sensor
-def process_lake_data(
+def clumpedsensor_fromDataset(
     lakedata: xr.Dataset,
+    weight_type_depth: str='uniform',
+    weight_type_time: str='uniform',
+    clumped_model: str='I-CDES90',
+    **kwargs
     ) -> xr.Dataset:
+    '''
+    Read in the lakedata dataset and compute the depth and time 
+    weighted temperature and cap47 values
 
+    Parameters
+    ----------
+    lakedata : xr.Dataset
+        dataset produced by the process_ebm_results function
+    weight_type_* : str
+        the type of weighting function to use (for *_depth or *_time)
+    clumped_model : str
+        name of the calibration model to use for the clumped calculation
+    
+    Returns 
+    -------
+    xr.Dataset
+        the original dataset with the added weighting, temperature, and cap47 variables
+    '''
     timesteps = lakedata['doy'].values.tolist()
     cap47 = []
 
@@ -800,14 +844,14 @@ def process_lake_data(
         temp_c = pd.DataFrame(tmpdf['temp_c'])['temp_c']
         depth = pd.DataFrame(tmpdf['depth_index'])['depth_index']
         
-        ts_cap47 = clumped_sensor(temp_c, 'I-CDES90')
+        ts_cap47 = clumped_sensor(temp_c, clumped_model)
         ts_cap47 = pd.DataFrame(ts_cap47).copy()
         ts_cap47 = ts_cap47.rename(columns={'temp_c': 'cap47'})
         cap47.append(ts_cap47)
         nan_count = temp_c[::-1].isna().cumprod().sum()
         depth.iloc[-nan_count:] = np.nan 
 
-        depth_weights = generate_depth_weights(depth, 'uniform')  
+        depth_weights = generate_depth_weights(depth, weight_type_depth)  
         depth_weights = pd.DataFrame(depth_weights.values.flatten())
        
         if ts == timesteps[0]:
@@ -825,12 +869,12 @@ def process_lake_data(
             df = pd.concat([tdf, df], ignore_index=True)
             df = df.dropna()      
 
-    T47_c_depth_wtd_mean = clumped_temperature(df['cap47_depth_wtd_mean'], 'I-CDES90')
+    T47_c_depth_wtd_mean = clumped_temperature(df['cap47_depth_wtd_mean'], clumped_model)
 
     df = df.set_index('doy', drop=True)
     df = df.assign(T47_c_depth_wtd_mean = T47_c_depth_wtd_mean)
     df = xr.Dataset.from_dataframe(df)
-    time_weights = generate_time_weights(timesteps, 'uniform') 
+    time_weights = generate_time_weights(timesteps, weight_type_time) 
     time_weights = time_weights[::-1]
     df = df.assign(time_weights=(['doy'], time_weights))
     df['cap47_time_wtd_mean'] = (df['cap47_depth_wtd_mean']* df['time_weights']).sum() / df['time_weights'].sum()
@@ -852,3 +896,50 @@ def process_lake_data(
     final_output["depth_weights"] = (['doy', 'depth_index'], depth_weights_expanded)
     final_output = final_output.dropna(dim='depth_index', how='all')
     return final_output
+
+
+# --- function to wrap around the clumped sensor for reading and storing results
+def process_lake_carbonate(
+        casedir: str,
+        rundict: dict,
+        proc_filetype: str='.nc',
+        savename_prefix: str='clumpedSens_',
+):
+    '''
+    Wrapper for the clumpedsensor_fromDataset function. Read in the 
+    xr.Dataset for the lakedata, run the clumpedsensor_* function,
+    save the result in the casedir 
+
+    Parameters
+    ----------
+    casedir : str
+        directory that holds the case inputs / outputs. The final data should be
+        stored in casedir/results
+    rundict : dict
+        dictionary of default values (including overwritten values from batch.csv)
+    proc_filetype : str
+        the file suffix of the processed file
+
+    Returns
+    -------
+    '''
+    # --- open the lakedata xarray file 
+    # get the file name from the output file (following the rules used
+    # in the process_ebm_results function)
+    if proc_filetype != ".nc":
+        print("Warning: process_lake_carbonate fxn does not yet have functionality for file suffixes other than `.nc`. Please update proc_filetype")
+    # define filename    
+    nc_filename = rundict['output_prof'].replace(".dat", proc_filetype)
+    # read in the file
+    lakedata = xr.open_dataset(os.path.join(casedir, 'results', nc_filename))
+
+    # --- run the sensor function
+    lakedata = clumpedsensor_fromDataset(
+                lakedata,
+                **rundict
+            )
+    
+    # --- save the resulting lakedata 
+    savename = f"{savename_prefix}{nc_filename}"
+    lakedata.to_netcdf(os.path.join(casedir, 'results', savename))
+    

@@ -59,7 +59,10 @@ for idx in range(len(df)):
     lhf.run_ebm(rundict, idx=(idx+1), idx_tot=len(df))
     
     # --- process the lake ebm results and save in results dir
-    lhf.process_ebm_results(rundict)
+    casedir = lhf.process_ebm_results(rundict)
+
+    # --- run the clumped sensor
+    lhf.process_lake_carbonate(casedir, rundict)
 
 
 

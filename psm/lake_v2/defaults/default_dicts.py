@@ -78,5 +78,11 @@ defaults_main = {
     'prof_return_dataset': True, # [bool] whether to return xarray dataset (true) or pandas dataframe in xyz (false)
     'prof_avg_year': True,      # [bool] whether to return data for each year (false) or the long-term averaged monthly data (true)
     'prof_days_per_year': 360,  # [int] days per year used for the long term averaging (not used if `prof_avg_year` is false) (360 is consistent with Dee et al. assuming 12 months/yr from 30-day timesteps)
+
+    # ---------------------------------------------------------------------
+    # --- carbonate clumped sensor inputs
+    'weight_type_depth': 'uniform',   # [str] name of the weighting function to use over depth
+    'weight_type_time': 'uniform',    # [str] name of the weighting function applied over time 
+    'clumped_model': 'I-CDES90',      # [str] name of the clumped calibration model to use
 }
     
