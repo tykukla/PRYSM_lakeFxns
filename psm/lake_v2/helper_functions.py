@@ -811,6 +811,7 @@ def generate_time_weights(
 # --- function to process lake profile data for clumped carbonate sensor
 def clumpedsensor_fromDataset(
     lakedata: xr.Dataset,
+    rundict: dict,
     weight_type_depth: str='uniform',
     weight_type_time: str='uniform',
     clumped_model: str='I-CDES90',
@@ -824,6 +825,8 @@ def clumpedsensor_fromDataset(
     ----------
     lakedata : xr.Dataset
         dataset produced by the process_ebm_results function
+    rundict : dict
+        input dictionary to pass to weighting functions for kwargs
     weight_type_* : str
         the type of weighting function to use (for *_depth or *_time)
     clumped_model : str
@@ -851,7 +854,7 @@ def clumpedsensor_fromDataset(
         nan_count = temp_c[::-1].isna().cumprod().sum()
         depth.iloc[-nan_count:] = np.nan 
 
-        depth_weights = generate_depth_weights(depth, weight_type_depth)  
+        depth_weights = generate_depth_weights(depth, weight_type_depth, **rundict)  
         depth_weights = pd.DataFrame(depth_weights.values.flatten())
        
         if ts == timesteps[0]:
@@ -874,7 +877,7 @@ def clumpedsensor_fromDataset(
     df = df.set_index('doy', drop=True)
     df = df.assign(T47_c_depth_wtd_mean = T47_c_depth_wtd_mean)
     df = xr.Dataset.from_dataframe(df)
-    time_weights = generate_time_weights(timesteps, weight_type_time) 
+    time_weights = generate_time_weights(timesteps, weight_type_time, **rundict) 
     time_weights = time_weights[::-1]
     df = df.assign(time_weights=(['doy'], time_weights))
     df['cap47_time_wtd_mean'] = (df['cap47_depth_wtd_mean']* df['time_weights']).sum() / df['time_weights'].sum()
@@ -936,6 +939,7 @@ def process_lake_carbonate(
     # --- run the sensor function
     lakedata = clumpedsensor_fromDataset(
                 lakedata,
+                rundict,
                 **rundict
             )
     
