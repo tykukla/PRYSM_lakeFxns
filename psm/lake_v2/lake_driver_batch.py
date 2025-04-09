@@ -28,7 +28,7 @@ import helper_functions as lhf
 # %% 
 # [CHANGE THESE] ------
 batch_dir = "/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/batch_inputs"
-batch_file = "batch_test.csv"
+batch_file = "batch_AMJJASO.csv"
 # ---------------------
 
 

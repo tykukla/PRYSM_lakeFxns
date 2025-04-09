@@ -1,0 +1,2 @@
+casename,depth_begin,default_dict_path,dict_name,datafile,outdir,xlat,xlon,gmt,basedep,max_dep,this_case
+AMJJASO_1,40,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_main,CP_SLIM_hiTopo_500ppm_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2,36,-109,6,1200,999,Y
