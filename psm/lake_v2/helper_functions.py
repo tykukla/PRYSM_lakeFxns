@@ -874,38 +874,32 @@ def clumpedsensor_fromDataset(
             df = pd.concat([tdf, df], ignore_index=True)
             df = df.dropna()      
 
-    T47_c_depth_wtd_mean = clumped_temperature(df['cap47_depth_wtd_mean'], clumped_model)
+    T47C_depth_wtd_mean = clumped_temperature(df['cap47_depth_wtd_mean'], clumped_model)
 
     df = df.set_index('doy', drop=True)
-    df = df.assign(T47_c_depth_wtd_mean = T47_c_depth_wtd_mean)
+    df = df.assign(T47C_depth_wtd_mean = T47C_depth_wtd_mean)
     df = xr.Dataset.from_dataframe(df)
     time_weights = generate_time_weights(timesteps, weight_type_time, **rundict) 
     time_weights = time_weights[::-1]
     df = df.assign(time_weights=(['doy'], time_weights))
     df['cap47_time_wtd_mean'] = (df['cap47_depth_wtd_mean']* df['time_weights']).sum() / df['time_weights'].sum()
-    df['T47_c_MAT'] = (df['T47_c_depth_wtd_mean'] * df['time_weights']).sum() / df['time_weights'].sum()    
 
+    # --- Mean annual lake temperature [MALT] (depth/time weighted) from T47 data to recostruct T47 MAAT
+    df['T47C_MALT'] = (df['T47C_depth_wtd_mean'] * df['time_weights']).sum() / df['time_weights'].sum()    
+    
+    # --- T47 reconstructed MAAT from T47 MALT: MAAT = -0.0318 * T water^2 + 2.195 * T water - 12.607 ; R^2 = 0.96 (Hren & Sheldon 2012 ; [HS12])
+    df['T47C_MAAT_HS12'] = (-0.0318 * (df['T47C_MALT']**2)) + (2.195 * df['T47C_MALT']) - 12.607
+    
     final_output_init = xr.combine_by_coords([df, lakedata])
-
-    # --- TROUBLESHOOT: Hailey is hitting an error when she adds these lines -------
-    # NEW, calculate mean annual lake temperature (depth/time weighted) from T47
-    df['T47_c_MALT'] = (df['T47_c_depth_wtd_mean'] * df['time_weights']).sum() / df['time_weights'].sum()    
+ 
+    # --- actual daily lake surface temperature [LST] from PRYSM lake profile using the 1st depth step (1 meter)
+    final_output_init['LST_PRYSM'] = (['doy'], (((pd.DataFrame(final_output_init['temp_c'])).iloc[0]).dropna()))
+    
+    # --- actual mean annual lake surface temperature [MALST] from PRYSM lake profile to reconstruct actual MAAT
+    final_output_init['Actual_MALST_PRYSM'] = (final_output_init['LST_PRYSM'] * df['time_weights']).sum() / df['time_weights'].sum()  
     #
-    # NEW, calculate mean annual air temperature from 'T47_c_MALT' above
-    df['T47_c_MAAT'] = (-0.0318 * (df['T47_c_MALT']**2)) + (2.195 * df['T47_c_MALT']) - 12.607
-    # 
-    # NEW, find *actual* daily lake surface temperatures using the 1st depth step (1 meter) (to compare to T47 results)
-    temp_c_surf = ((pd.DataFrame(final_output_init['temp_c'])).iloc[0]).dropna()
-    #
-    # NEW, assign 'temp_c_surf' to init final output xr dataset
-    final_output_init['temp_c_surf'] = (['doy'], temp_c_surf)
-    #
-    # NEW, calculate mean annual lake surface temperature from 'temp_c_surf' above and assign to xr dataset
-    final_output_init['temp_c_MALST'] = (temp_c_surf * df['time_weights']).sum() / df['time_weights'].sum()  
-    #
-    # NEW, calculate mean annual air temperature from 'temp_c_MALST' above and assign to xr dataset
-    # NOTE: this is where I am getting the error when running in PRYSM, the 'temp_c_MALST' values are accurate but something is going wrong with them in this calculation and the results are wrong (e.g. -9 degrees instead of 15)
-    final_output_init['temp_c_surf_MAAT'] = (-0.0318 * (final_output_init['temp_c_MALST'].values**2)) + (2.195 * final_output_init['temp_c_MALST'].values) - 12.607
+    # --- actual MAAT from MALST: MAAT = -0.0318 * T water^2 + 2.195 * T water - 12.607 ; R^2 = 0.96 (Hren & Sheldon 2012 ; [HS12])
+    final_output_init['Actual_MAAT_from_MALST_PRYSM_HS12'] = (-0.0318 * (final_output_init['Actual_MALST_PRYSM'].values**2)) + (2.195 * final_output_init['Actual_MALST_PRYSM'].values) - 12.607
     # ---------------------------------------------------------------------------------------------------
 
     final_output_init = final_output_init.assign(depth_weights=(['depth_index'], depth_weights.to_numpy().flatten()))

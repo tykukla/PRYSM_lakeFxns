@@ -1,0 +1,4 @@
+casename,default_dict_path,dict_name,datafile,outdir
+modernTopo_280,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_CP,CP_SLIM_modernTopo_280ppm_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2
+hiTopo_280, ...
+(everything is the same for each row except "casename" and "datafile")
