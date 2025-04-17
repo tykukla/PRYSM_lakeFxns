@@ -137,7 +137,7 @@ defaults_CP = {
     "alb_slush": 0.4,  # [] albedo of melting snow
     "alb_snow": 0.7,   # [] albedo of non-melting snow
     "depth_begin": 100, # [m] prescribed depth
-    "salty_begin": 35.0, # [ppt] prescribed salinity
+    "salty_begin": 4.0, # [ppt] prescribed salinity
     "o18air": -14.0,   # [per mil VSMOW] d18O of air above lake
     "deutair": -96.,   # [per mil VSMOW] dD of air above lake
     "tempinit": 18.,   # [degC] temperature to initialize lake at in INIT_LAKE subroutine

@@ -79,6 +79,7 @@ def read_parameter_files(
 def override_defaults(
         df: pd.DataFrame,
         rundict: dict,
+        default_tag: str="**default**",
 ) -> dict:
     '''
     Take values from the batch dataframe and use them to overwrite 
@@ -90,6 +91,9 @@ def override_defaults(
         dataframe of inputs from the batch.csv
     rundict : dict
         dictionary of default values
+    default_tag : str
+        the tag to look for in the batch.csv file to indicate 
+        that the value is a default value (e.g. "**default**")
 
     Returns
     -------
@@ -103,7 +107,7 @@ def override_defaults(
 
     # Update default values
     for key, value in zip(keys, values):
-        if key in rundict:
+        if (key in rundict) & (value != default_tag):
             # attempt to infer type from default dictionary
             default_type = type(rundict[key])
             try:
@@ -114,6 +118,8 @@ def override_defaults(
                     rundict[key] = default_type(value)
             except ValueError:
                 raise ValueError(f"Could not convert value '{value}' to type {default_type} for key '{key}'")
+        elif value == default_tag:
+            pass # then do nothing
         else:
             if key in ["default_dict_path", "dict_name", "this_case"]:
                 # these keys are intentionally omitted from the default dict because

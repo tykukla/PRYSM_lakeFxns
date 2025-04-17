@@ -28,7 +28,7 @@ import helper_functions as lhf
 # %% 
 # [CHANGE THESE] ------
 batch_dir = "/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/batch_inputs"
-batch_file = "batch_AMJJASO.csv"
+batch_file = "batch_CP_sensitivity_one_at_a_time.csv"
 # ---------------------
 
 
@@ -69,3 +69,44 @@ for idx in range(len(df)):
 
 
 # %%
+
+
+
+# extract column names and values
+keys = df.columns.tolist()  # columns are the keys
+values = df.iloc[0].tolist()  # values are the row
+
+default_tag = "**default**"
+
+# %% 
+# Update default values
+# for key, value in zip(keys, values):
+# %% 
+
+key = "b_area"
+value = values[3]
+value
+#%% 
+
+if (key in rundict) & (value != default_tag):
+    # attempt to infer type from default dictionary
+    default_type = type(rundict[key])
+    try:
+        if default_type is list:
+            # Convert comma-separated string to a list
+            rundict[key] = value.split(',') if isinstance(value, str) else list(value)
+        else:
+            rundict[key] = default_type(value)
+    except ValueError:
+        raise ValueError(f"Could not convert value '{value}' to type {default_type} for key '{key}'")
+elif value == default_tag:
+    pass # then do nothing
+else:
+    if key in ["default_dict_path", "dict_name", "this_case"]:
+        # these keys are intentionally omitted from the default dict because
+        # they define the default dict
+        rundict[key] = value
+    else:
+        # if a column is not in the default_dict then
+        # there's probably a typo
+        warnings.warn(f"batch.csv column {key} is not in the default dictionary. Is there a typo?", UserWarning)
