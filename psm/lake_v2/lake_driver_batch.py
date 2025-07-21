@@ -7,6 +7,7 @@
 # %% 
 import re
 import os
+import gc
 import shutil
 import subprocess  # for running fortran model
 import numpy as np
@@ -28,7 +29,7 @@ import helper_functions as lhf
 # %% 
 # [CHANGE THESE] ------
 batch_dir = "/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/batch_inputs"
-batch_file = "batch_CP_sensitivity_one_at_a_time.csv"
+batch_file = "batch_CP_sensitivity_morris-40iter_v1.csv"
 # ---------------------
 
 
@@ -51,6 +52,9 @@ for idx in range(len(df)):
     rundict, inc_list = lhf.read_parameter_files(row)
     # --- overwrite the default values
     rundict = lhf.override_defaults(row, rundict)
+    # --- update climate if necessary
+    if rundict.get('update_clim'):
+        rundict = lhf.update_clim(rundict)
 
     # --- set up the case directory
     lhf.setup_case(rundict, inc_list, df=df)
@@ -64,11 +68,18 @@ for idx in range(len(df)):
     # --- run the clumped sensor
     lhf.process_lake_carbonate(casedir, rundict)
 
+    # --- run garbage collectsor before next iter
+    gc.collect()
 
 
 
 
 # %%
+# ------------------------------------------------------------------
+# 
+# +++ SCRATCH +++
+# 
+# ------------------------------------------------------------------
 
 
 

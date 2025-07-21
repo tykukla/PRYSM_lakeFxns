@@ -167,6 +167,18 @@ defaults_CP = {
     'prof_days_per_year': 360,  # [int] days per year used for the long term averaging (not used if `prof_avg_year` is false) (360 is consistent with Dee et al. assuming 12 months/yr from 30-day timesteps)
 
     # ---------------------------------------------------------------------
+    # --- update climate inputs
+    'update_clim': False, # [bool] redundancy to make sure we don't update climate unless we really mean it 
+    'TSplus': 0.,          # [float | int] [degK (?)] add this value to temperature uniformly (zero for no change)
+    'RHplus': 0.,          # [float | int] [%] add this value to relative humidity (in percent) uniformly (zero for no change)
+    'Ufac': 1.,            # [float | int] [m s-1] multiply wind speed by this value uniformly (one for no change)
+    'FSDSplus': 0.,        # [float | int] [W m-2] add this value to downwelling shortwave flux uniformly (zero for no change)
+    'FLDSplus': 0.,        # [float | int] [W m-2] add this value to the downwelling longwave flux uniformly (zero for no change)
+    'PSplus': 0.,          # [float | int] [Pa (?)] add this value to surface pressure uniformly (zero for no change)
+    'PRECTplus': 0.,       # [float | int] [mm per 30 days] add this value to precipitation uniformly (zero for no change)
+    'runoffplus': 0.,      # [float | int] [mm per 30 days] add this value to runoff uniformly (zero for no change)
+
+    # ---------------------------------------------------------------------
     # --- carbonate clumped sensor inputs
     'weight_type_depth': 'uniform',   # [str] name of the weighting function to use over depth
     'weight_type_time': 'uniform',    # [str] name of the weighting function applied over time 

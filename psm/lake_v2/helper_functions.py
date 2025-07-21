@@ -17,6 +17,7 @@ import pandas as pd
 import xarray as xr
 import subprocess  # for running fortran model
 import warnings
+from pathlib import Path
 from typing import Tuple
 
 # %%
@@ -198,6 +199,112 @@ def setup_case(
     if casetype == "batch":
         df.to_csv(os.path.join(casedir, 'batch.csv'), index=False)
     # ---------------------------------------------
+
+
+
+def get_available_filename(directory, filename):
+    '''
+    Find a filename in a directory that's not yet taken.
+    if `filename` is taken, append a number to it until it's not.
+    '''
+    directory = Path(directory)
+    base = filename.rsplit('.', 1)[0]
+    ext = filename.rsplit('.', 1)[-1]
+
+    candidate = directory / filename
+    counter = 0
+
+    while candidate.exists():
+        candidate = directory / f"{base}-{counter}.{ext}"
+        counter += 1
+
+    return str(candidate)
+
+
+
+def update_clim(
+        rundict: dict,
+):
+    '''
+    Update the climate file based on the variable additions / modifications
+    in the run dictionary.
+
+    Note, we read in the "-withHeater.txt" version of the climate files to 
+    make sure we are modifying the correct column of the file. 
+
+    Function returns the run dictionary with the updated climate datafile name.
+
+    Parameters
+    ----------
+    rundict : dict
+        dictionary of defaults (if batch mode, this should be already 
+        modified to include any overwrites from a batch.csv file)
+    '''
+    # --- read in the proper climate data file 
+    outdir = rundict['outdir']
+    clim_datafile_withHeader = rundict['datafile'].replace('.txt', '-withHeader.txt')
+    fn_clim = os.path.join(outdir, 'clim_inputs', clim_datafile_withHeader)
+    df = pd.read_csv(fn_clim, sep='\s+')
+
+    # --- create a new climate file name for saving
+    climdir = os.path.join(outdir, 'clim_inputs')
+    fn_clim_save = rundict['datafile'].replace('.txt', f"+{rundict['casename']}.txt")
+    # update the filename if it's already taken to avoid overwrite
+    fn_clim_save_path = get_available_filename(climdir, fn_clim_save)
+
+
+    # --- update the climate values 
+    # [ TEMPERATURE ]
+    if rundict.get('TSplus') is not None:
+        TSplus = rundict['TSplus']
+        df['TREFHT'] = df['TREFHT'] + TSplus
+    
+    # [ RELATIVE HUMIDITY ]
+    if rundict.get('RHplus') is not None:
+        RHplus = rundict['RHplus']
+        df['RELHUM'] = (df['RELHUM'] + RHplus).clip(lower=1, upper=99)
+    
+    # [ WIND SPEED ]
+    if rundict.get('Ufac') is not None:
+        Ufac = rundict['Ufac']
+        df['U10'] = (df['U10'] * Ufac).clip(lower=0.1)
+
+    # [ DOWNWELLING SW ]
+    if rundict.get('FSDSplus') is not None:
+        FSDSplus = rundict['FSDSplus']
+        df['FSDS'] = (df['FSDS'] + FSDSplus).clip(lower=1)
+
+    # [ DOWNWELLING LW ]
+    if rundict.get('FLDSplus') is not None:
+        FSDSplus = rundict['FLDSplus']
+        df['FLDS'] = (df['FLDS'] + FSDSplus).clip(lower=1)
+
+    # [ SURFACE PRESSURE ]
+    if rundict.get('PSplus') is not None:
+        PSplus = rundict['PSplus']
+        df['PS'] = (df['PS'] + PSplus).clip(lower=1)
+
+    # [ PRECIPITATION ]
+    if rundict.get('PRECTplus') is not None:
+        PRECTplus = rundict['PRECTplus']
+        df['PRECT'] = (df['PRECT'] + PRECTplus).clip(lower=0.01)
+
+    # [ RUNOFF ]
+    if rundict.get('runoffplus') is not None:
+        runoffplus = rundict['runoffplus']
+        df['runoff'] = (df['runoff'] + runoffplus). clip(lower=0.01)
+    
+
+    # --- update the datafile in the rundict
+    rundict['datafile'] = fn_clim_save
+
+    # --- save the result
+    # No headers
+    # save the header-less version
+    df.to_csv(fn_clim_save_path, header=False, index=False, sep=' ')
+
+    return rundict
+
 
     
 # --- function to modify a `.inc` file template for a given run
@@ -403,6 +510,11 @@ def profile_read_process(
         return_dataset: bool=True,
         avg_year: bool=True,
         days_per_year: int=360,
+        run_error_check: bool = True,
+        error_check_limit: int = 10,
+        error_check_min_threshold_step: float = 0.3,
+        same_depth_check: bool=True,
+        single_doy_check: bool=True,
 ) -> pd.DataFrame:
     '''
     Read in the lake energy balance model profile data and shape it into 
@@ -440,6 +552,18 @@ def profile_read_process(
         days per year to convert day-of-year to month. day-of-year timeslices
         are offset by 30 days each, so we assume a 360 day year for simplicity
         (each month is 30 days)
+    run_error_check : bool
+        whether to run the two error checks
+    error_check_limit : int
+        how many iterations to use while searching for processing errors in the code 
+        before quitting
+    error_check_min_threshold_step : float
+        how much to increase min_threshold by for the error check
+    same_depth_check : bool
+        whether to check that all doy steps have data to the same depth
+    single_doy_check : bool
+        whether to check for the error where only a single doy is retained
+    
 
     Returns
     -------
@@ -448,84 +572,124 @@ def profile_read_process(
     '''
     # --- read in the data
     prof_loc = os.path.join(prof_path, prof_fn)
-    df = pd.read_csv(prof_loc, delim_whitespace=True, header=None)
+    df = pd.read_csv(prof_loc, sep='\s+', header=None)
 
-    # --- loop through data to construct output dataframe
-    tmpdx = 0   # index for rows in a given doy
-    doy_row = True  # assume first row includes day of year information
-    dfout = pd.DataFrame(columns=["depth_index", "temp_c", "day"]) # empty to hold the final output
-    temps_doy = pd.DataFrame()  # empty to hold the temperature output for a given doy
+    # track potential errors in processing the profile dat
+    # (currently only works if we return dataset)
+    error_check = True
+    idx = 0   # track iterations of error_check
+    min_threshold_init = min_threshold  # save the original min threshold before potential overwrite
+    check1_pass, check2_pass = False, False # whether we've passed the checks
 
-    for rowdx in range((len(df)-1)):      
-        if doy_row:
-            doy = df.iloc[rowdx,0].copy()
-            temps_row = df.iloc[rowdx,1:]
-        else:
-            temps_row = df.iloc[rowdx,:]
+    while error_check:
+        idx += 1 
+        # --- loop through data to construct output dataframe
+        tmpdx = 0   # index for rows in a given doy
+        doy_row = True  # assume first row includes day of year information
+        dfout = pd.DataFrame(columns=["depth_index", "temp_c", "day"]) # empty to hold the final output
+        temps_doy = pd.DataFrame()  # empty to hold the temperature output for a given doy
 
-        # create the full row if it doesn't exist
-        if tmpdx == 0:
-            temps_doy = temps_row
-        else:  # add these temps to the last
-            temps_doy = pd.concat([temps_doy, temps_row], ignore_index=True)
+        for rowdx in range((len(df)-1)):      
+            if doy_row:
+                doy = df.iloc[rowdx,0].copy()
+                temps_row = df.iloc[rowdx,1:]
+            else:
+                temps_row = df.iloc[rowdx,:]
 
-        # get the last temperature of the current row (avoiding the trailing nans)
-        tlast_i = df.iloc[rowdx,df.iloc[rowdx,].last_valid_index()]
-        # get the first temperature of the next row
-        tfirst_ip1 = df.iloc[(rowdx+1),0]
-        # get the difference
-        tdiff = tlast_i - tfirst_ip1
+            # create the full row if it doesn't exist
+            if tmpdx == 0:
+                temps_doy = temps_row
+            else:  # add these temps to the last
+                temps_doy = pd.concat([temps_doy, temps_row], ignore_index=True)
 
-        # to get an upper bound on the difference we'd expect between
-        # tfirst_ip1 and tlast_i, we take the abs mean diff of row i and 
-        # multiply by 2
-        diff_threshold = max(np.abs(temps_row.diff()[1:]).mean() * 2, min_threshold)
-        temps_row_continue = (np.abs(tdiff) < diff_threshold) & (tdiff >= 0)
+            # get the last temperature of the current row (avoiding the trailing nans)
+            tlast_i = df.iloc[rowdx,df.iloc[rowdx,].last_valid_index()]
+            # get the first temperature of the next row
+            tfirst_ip1 = df.iloc[(rowdx+1),0]
+            # get the difference
+            tdiff = tlast_i - tfirst_ip1
 
-        # --- troubleshoot
-        # print(f'diff: {tdiff} ; continue: {temps_row_continue}')
-        # --- 
-        # set up the next row
-        if temps_row_continue:
-            # then move to the next row knowing it's a continuation of the previous
-            doy_row = False
-            tmpdx += 1 
-        else: # add this temperature round to the full df
-            tmpdfout = pd.DataFrame({
-                                        "depth_index": np.arange(len(temps_doy)) + 1,
-                                        "temp_c": temps_doy,
-                                        "day": doy
-                                    })
-            dfout = pd.concat([dfout, tmpdfout], ignore_index=True)
-            doy_row = True
-            tmpdx = 0
+            # to get an upper bound on the difference we'd expect between
+            # tfirst_ip1 and tlast_i, we take the abs mean diff of row i and 
+            # multiply by 2
+            diff_threshold = max(np.abs(temps_row.diff()[1:]).mean() * 2, min_threshold)
+            temps_row_continue = (np.abs(tdiff) < diff_threshold) & (tdiff >= 0)
 
-    # --- check if we should omit spinup data
-    if omit_spinup:
-        # find the end of the spinup based on the last doy 
-        # that is less than the one before it 
-        for rowdx in range(len(dfout)-1):
-            doy_i = dfout.iloc[rowdx, :]['day']
-            doy_ip1 = dfout.iloc[(rowdx+1), :]['day']
-            if doy_ip1 < doy_i: 
-                end_spinup_dx = rowdx
-                
-        dfout = dfout[end_spinup_dx+1:].reset_index(drop=True).copy()
+            # --- troubleshoot
+            # print(f'diff: {tdiff} ; continue: {temps_row_continue}')
+            # --- 
+            # set up the next row
+            if temps_row_continue:
+                # then move to the next row knowing it's a continuation of the previous
+                doy_row = False
+                tmpdx += 1 
+            else: # add this temperature round to the full df
+                tmpdfout = pd.DataFrame({
+                                            "depth_index": np.arange(len(temps_doy)) + 1,
+                                            "temp_c": temps_doy,
+                                            "day": doy
+                                        })
+                dfout = pd.concat([dfout, tmpdfout], ignore_index=True)
+                doy_row = True
+                tmpdx = 0
 
-    # --- check if we should average years over timesteps
-    if avg_year: # take annual average
-        dfout['doy'] = dfout['day'] % days_per_year
-        dfout = dfout.groupby(['doy', 'depth_index']).mean().reset_index() # take mean
-        time_col = "doy"
-    else: 
-        time_col = "day"
+        # --- check if we should omit spinup data
+        if omit_spinup:
+            # find the end of the spinup based on the last doy 
+            # that is less than the one before it 
+            for rowdx in range(len(dfout)-1):
+                doy_i = dfout.iloc[rowdx, :]['day']
+                doy_ip1 = dfout.iloc[(rowdx+1), :]['day']
+                if doy_ip1 < doy_i: 
+                    end_spinup_dx = rowdx
+                    
+            dfout = dfout[end_spinup_dx+1:].reset_index(drop=True).copy()
 
-    # --- check if we should convert to xr dataset
-    if return_dataset:
-        dfout = profile_df_to_ds(dfout, time_col=time_col)
+        # --- check if we should average years over timesteps
+        if avg_year: # take annual average
+            dfout['doy'] = dfout['day'] % days_per_year
+            dfout = dfout.groupby(['doy', 'depth_index']).mean().reset_index() # take mean
+            time_col = "doy"
+        else: 
+            time_col = "day"
+
+
+        # check if we should skip the error check 
+        if idx > error_check_limit:
+            error_check = False
+        
+        # --- check if we should convert to xr dataset (and do error checks)
+        if return_dataset:
+            dfout = profile_df_to_ds(dfout, time_col=time_col)
+            if run_error_check:
+                # [ CHECK 1 ] -- only one day of year
+                if single_doy_check:
+                    if len(dfout.doy) == 1:
+                        print("failed check 1")
+                        min_threshold += error_check_min_threshold_step
+                        print(str(min_threshold))
+                        continue
+                    else:
+                        check1_pass = True
+                # [ CHECK 2 ] -- check that all doys have data to the same depth
+                if same_depth_check:
+                    valid_depth_mask = ~dfout["temp_c"].isnull()
+                    max_valid_depth_index = valid_depth_mask[::-1].argmax(dim="depth_index")
+                    if (max_valid_depth_index == max_valid_depth_index[0]).all(): # then all go to the same depth
+                        check2_pass = True
+                    else:
+                        print("failed check 2")
+                        min_threshold += error_check_min_threshold_step
+                        print(str(min_threshold))
+                if check1_pass and check2_pass:
+                    error_check = False
+            else:
+                error_check = False
+        # if we aren't turning it into a dataset, we assume don't have functionality for error checks yet
+        else: 
+            error_check = False
 
     return dfout
-
 
 # %% 
 # --- function to turn profile dataframe (from profile_read_process) to an xarray dataset
