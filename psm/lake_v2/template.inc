@@ -59,7 +59,7 @@
 
     !Begin Ashling
     ! Removed from the model, for easier access
-    character(38) :: datafile='CP_SLIM_lowTopo_500ppm_test_input.txt' ! the data file to open in FILE_OPEN subroutine
+    character(100) :: datafile='CP_SLIM_lowTopo_500ppm_test_input.txt' ! the data file to open in FILE_OPEN subroutine
     character(38) :: output_prof= 'cesm_test_prof.dat'
     character(38) :: output_surf= 'cesm_test_surf.dat'
     parameter (tempinit= 18.0) ! temperature to initialize lake at in INIT_LAKE subroutine
