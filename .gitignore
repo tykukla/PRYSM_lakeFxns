@@ -11,6 +11,7 @@ tests/results
 tests/results/*
 psm/lake_v2/batch_inputs/*.csv
 psm/lake_v2/clim_inputs/*.txt
+psm/lake_v2/clim_inputs/CP_SLIM_*
 psm/lake_v2/old_ignore
 psm/lake_v2/old_ignore/*
 psm/lake_v2/old_ignore/*/*
@@ -23,6 +24,11 @@ psm/lake_v2/output/singlerun/*/*/*
 psm/lake_v2/scratch
 psm/lake_v2/scratch/*
 psm/lake_v2/scratch/*/*
+*.DS_Store
+psm/.DS_Store
+psm/*/.DS_Store
+psm/*/*/.DS_Store
+psm/*/*/*/.DS_Store
 
 # Distribution / packaging
 .Python
