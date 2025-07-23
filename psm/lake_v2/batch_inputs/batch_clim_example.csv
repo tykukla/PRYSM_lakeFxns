@@ -1,4 +1,8 @@
 casename,default_dict_path,dict_name,datafile,outdir
-modernTopo_280,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_CP,CP_SLIM_modernTopo_280ppm_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2
-hiTopo_280, ...
-(everything is the same for each row except "casename" and "datafile")
+allclim_1,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_CP,CP_SLIM_modernTopo_280ppm_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2
+allclim_2,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_CP,CP_SLIM_lowTopo_280ppm_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2
+allclim_3,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_CP,CP_SLIM_modernTopo_500ppm_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2
+allclim_4,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_CP,CP_SLIM_lowTopo_500ppm_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2
+allclim_5,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_CP,CP_SLIM_modernTopo_350ppm_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2
+allclim_6,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_CP,CP_SLIM_hiTopo_280ppm_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2
+allclim_7,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/defaults,defaults_CP,CP_SLIM_hiTopo_500ppm_input.txt,/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2

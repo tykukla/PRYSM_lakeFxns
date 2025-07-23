@@ -29,7 +29,7 @@ import helper_functions as lhf
 # %% 
 # [CHANGE THESE] ------
 batch_dir = "/Users/tylerkukla/Documents/GitHub/PRYSM/psm/lake_v2/batch_inputs"
-batch_file = "batch_CP_sensitivity_morris-40iter_v1.csv"
+batch_file = "batch_clim_example_biasCorr.csv"
 # ---------------------
 
 

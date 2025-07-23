@@ -183,4 +183,6 @@ defaults_CP = {
     'weight_type_depth': 'uniform',   # [str] name of the weighting function to use over depth
     'weight_type_time': 'uniform',    # [str] name of the weighting function applied over time 
     'clumped_model': 'I-CDES90',      # [str] name of the clumped calibration model to use
+    'SBS_surface_wt_fract': 0.5,      # [float 0-1] fraction calcite forming at surface...
+                                      # ... Only used if `weight_type_depth` == "surface_bottom_split" (i.e., SBS)
 }

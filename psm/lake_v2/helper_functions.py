@@ -871,6 +871,18 @@ def generate_depth_weights(
         weights[0] = 1  # Assign weight of 1 to the first element
         weights = pd.DataFrame(weights)
 
+    elif weight_type == "surface_bottom_split":
+        # get relative weight of surface 
+        if kwargs.get('SBS_surface_wt_fract') is None:
+            surf_wt = 0.5
+            print(f'Warning: selected weight_type {weight_type}, but `SBS_surface_wt_fract` is not defined. Assuming equal weights for surface and bottom.')
+        else:
+            surf_wt = kwargs.get('SBS_surface_wt_fract')
+        weights = [0 if not pd.isna(val) else np.nan for val in depth] # Initialize all weights to 0
+        weights[0] = surf_wt   # Assign weight of surf_wt to the first element
+        weights[-1] = 1-surf_wt    # Assign weight of 1-surf_wt to the last element
+        weights = pd.DataFrame(weights)
+
     elif weight_type == 'step':
         # --- (check if min and max depths are defined)
         if kwargs.get('depth_min'):
